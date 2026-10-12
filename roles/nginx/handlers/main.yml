@@ -4,9 +4,11 @@
   ansible.builtin.systemd:
     name: nginx
     state: reloaded
+  when: ansible_service_mgr == "systemd"
 
 - name: Ensure Nginx is restarted
   become: true
   ansible.builtin.systemd:
     name: nginx
     state: restarted
+  when: ansible_service_mgr == "systemd"

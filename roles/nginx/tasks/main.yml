@@ -60,3 +60,4 @@
     name: nginx
     state: started
     enabled: true
+  when: ansible_service_mgr == "systemd"

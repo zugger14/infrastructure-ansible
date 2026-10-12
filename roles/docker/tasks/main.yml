@@ -7,6 +7,16 @@
     state: present
   when: ansible_os_family == "RedHat"
 
+- name: Ensure docker cli-plugins directory exists
+  become: true
+  ansible.builtin.file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: ansible_os_family == "RedHat"
+
 - name: Install Docker compose plugin on AL2023 if not present
   become: true
   ansible.builtin.get_url:
@@ -14,7 +24,6 @@
     dest: /usr/local/lib/docker/cli-plugins/docker-compose
     mode: '0755'
   when: ansible_os_family == "RedHat"
-  ignore_errors: true
 
 - name: Start and enable Docker service
   become: true
@@ -22,6 +31,7 @@
     name: docker
     state: started
     enabled: true
+  when: ansible_service_mgr == "systemd"
 
 - name: Add app user to docker group
   become: true
