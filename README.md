@@ -1,51 +1,27 @@
 # Multi-App Infrastructure & Deployment Automation (Ansible)
 
-A production-grade, 100% DRY (Don't Repeat Yourself), and role-based Ansible automation repository for provisioning AWS EC2 instances and orchestrating multiple dockerized web applications behind an Nginx reverse proxy.
+A production-grade, 100% DRY (Don't Repeat Yourself), and role-based Ansible automation suite designed to provision cloud servers (AWS EC2 - Amazon Linux 2023 / RHEL / Fedora) and orchestrate multiple dockerized web applications concurrently behind an Nginx reverse proxy.
 
 ---
 
-## 🌟 How the DRY Architecture Works
+## 🏗️ What this Automation Handles
 
-Previously, adding a new project required creating new tasks, new paths, and a dedicated `.conf` Nginx template for every app.
+1. **Host Hardening & Resource Optimization (`roles/common`)**:
+   - Automatically allocates a persistent **2GB swapfile** (`/swapfile`) with `/etc/fstab` persistence to keep memory-constrained `t3.micro` instances completely stable during multi-container builds.
+   - Installs essential base tools (`procps-ng`, `git`, `tar`).
 
-Now, the entire system is **driven purely by configuration**. A **single unified Jinja2 template** handles:
-- Subdomain routing on Port 80 (e.g., `myapp.*.nip.io` or `myapp.domain.com`)
-- Optional direct public port routing (e.g., `http://<IP>:8090/`)
-- Optional WebSocket reverse proxying (e.g., Socket.io, ws)
-- Custom upload size limits (`client_max_body_size`)
-- Automatic Git checkout & Docker Compose container lifecycle
+2. **Docker Engine & Docker Compose (`roles/docker`)**:
+   - Installs Docker daemon, enables the systemd service, and ensures the non-root user (`ec2-user`) belongs to the `docker` group.
+   - Automatically installs the official Docker Compose CLI plugin.
 
----
+3. **Dynamic Nginx Reverse Proxy (`roles/nginx`)**:
+   - Fixes the root port `80` catch-all issue with `default_server`, routing direct IP traffic to the designated root application (DevOps Portfolio).
+   - Generates virtual hosts via a single unified Jinja2 template supporting subdomain wildcard routing (`*.nip.io` or custom domains), dedicated direct ports (e.g., `:8080`, `:8000`), custom file upload limits, and WebSocket proxies (e.g. `Socket.io`).
 
-## 💡 How to Add a New Application
-
-To deploy another app in the future, **you do not touch any code or template files**. 
-Simply append an entry to `applications` in [`group_vars/all.yml`](file:///Users/shirish/vibe-coding-apps/infrastructure-ansible/group_vars/all.yml):
-
-```yaml
-applications:
-  # ... existing apps ...
-
-  - name: "my-new-app"
-    repo_url: "https://github.com/username/my-new-app.git"
-    version: "main"                 # Git branch, tag, or commit hash
-    service_port: 5000              # Internal container port
-    subdomain: "myapp"              # Subdomain on Port 80 (e.g. myapp.34.229.18.255.nip.io)
-    direct_port: 8090               # (Optional) Direct port (e.g. http://34.229.18.255:8090/)
-    client_max_body_size: "50M"     # (Optional) Default is 50M
-    websocket_port: 6001            # (Optional) If app uses WebSocket
-    websocket_path: "/socket.io/"   # (Optional) Default is /socket.io/
-```
-
-Then run:
-```bash
-ansible-playbook site.yml
-```
-Ansible will automatically:
-1. Clone the repository into `/home/ec2-user/my-new-app`
-2. Run `docker compose up -d --build`
-3. Generate `/etc/nginx/conf.d/my-new-app.conf` from the generic template
-4. Test and reload Nginx without any downtime
+4. **Multi-App Container Orchestration (`roles/apps`)**:
+   - Clones or pulls the latest code from GitHub for every application defined in `group_vars/all.yml`.
+   - Executes `docker compose up -d --build` dynamically in each directory.
+   - Prunes dangling docker images to prevent disk exhaustion.
 
 ---
 
@@ -53,17 +29,17 @@ Ansible will automatically:
 
 ```text
 infrastructure-ansible/
-├── ansible.cfg                          # Connection and execution settings
+├── ansible.cfg                          # Global Ansible defaults (inventory, SSH options, YAML output)
 ├── site.yml                             # Master orchestrator playbook
-├── README.md                            # Documentation
+├── README.md                            # Comprehensive runbook and documentation
 ├── inventory/
-│   └── hosts.ini                        # Target hosts and SSH settings
+│   └── hosts.ini                        # Target hosts and SSH connection parameters
 ├── group_vars/
 │   └── all.yml                          # Centralized configuration (Apps, Swap, Paths)
 └── roles/
-    ├── common/                          # Base system packages & persistent 2GB swapfile
+    ├── common/                          # System packages & 2GB Swap setup
     │   └── tasks/main.yml
-    ├── docker/                          # Docker Engine, Compose plugin, group membership
+    ├── docker/                          # Docker Engine, Compose plugin, user groups
     │   └── tasks/main.yml
     ├── nginx/                           # Dynamic Nginx virtual hosts & default_server fix
     │   ├── tasks/main.yml
@@ -77,19 +53,91 @@ infrastructure-ansible/
 
 ---
 
-## 🚀 Execution Commands
+## ⚡ Prerequisites
 
-From this folder:
+### 1. Install Ansible (Locally)
 ```bash
-# 1. Ping test
-ansible -m ping webservers
+# macOS (via Homebrew)
+brew install ansible
 
-# 2. Deploy everything
-ansible-playbook site.yml
-
-# 3. Only update Nginx configs without touching Docker
-ansible-playbook site.yml --tags "nginx"
-
-# 4. Only pull & restart Docker containers
-ansible-playbook site.yml --tags "apps"
+# Linux / Python (via pipx or pip)
+pip install ansible
 ```
+
+### 2. Verify Your SSH Key Permissions
+Make sure your AWS EC2 key has restricted `400` permissions:
+```bash
+chmod 400 ~/Desktop/shirish-webserver.pem
+```
+
+*(If your key is stored elsewhere, adjust `ansible_ssh_private_key_file` in [`inventory/hosts.ini`](inventory/hosts.ini)).*
+
+---
+
+## 🚀 Step-by-Step Instructions for Running
+
+### Step 1: Clone the Repo & Check Connectivity
+```bash
+git clone git@github.com:zugger14/infrastructure-ansible.git
+cd infrastructure-ansible
+
+# Test SSH connection to the server
+ansible -m ping webservers
+```
+
+### Step 2: Run a Dry-Run (Check Mode)
+Validate syntax and preview actions before making any server changes:
+```bash
+ansible-playbook site.yml --syntax-check
+ansible-playbook site.yml --check
+```
+
+### Step 3: Run the Full Playbook
+Execute all roles across the host:
+```bash
+ansible-playbook site.yml
+```
+
+### Step 4: Selective Execution Using Tags
+You don't need to re-run the full playbook when making small updates:
+- **Only update Nginx reverse proxy configurations:**
+  ```bash
+  ansible-playbook site.yml --tags "nginx"
+  ```
+- **Only pull latest code & redeploy Docker containers:**
+  ```bash
+  ansible-playbook site.yml --tags "apps"
+  ```
+- **Only reconfigure Docker service or base packages:**
+  ```bash
+  ansible-playbook site.yml --tags "docker"
+  ansible-playbook site.yml --tags "common"
+  ```
+
+---
+
+## 💡 How to Add a New Application in the Future
+
+The entire infrastructure is **100% DRY and configuration-driven**. To add a 4th or 5th application, **you never touch any task or template files**.
+
+Simply open [`group_vars/all.yml`](group_vars/all.yml) and add an item to the `applications` list:
+
+```yaml
+applications:
+  # ... existing apps ...
+
+  - name: "my-new-app"
+    repo_url: "https://github.com/zugger14/my-new-app.git"
+    version: "main"                 # Git branch, tag, or commit
+    service_port: 5000              # Port exposed by the container to localhost
+    subdomain: "myapp"              # Accessible at http://myapp.<EC2_IP>.nip.io/
+    direct_port: 8090               # (Optional) Accessible directly at http://<EC2_IP>:8090/
+    client_max_body_size: "50M"     # (Optional) Default is 50M
+    websocket_port: 6001            # (Optional) Set only if app requires WebSockets
+```
+
+Then execute:
+```bash
+ansible-playbook site.yml
+```
+Ansible will automatically clone the repository, run `docker compose up -d --build`, generate `/etc/nginx/conf.d/my-new-app.conf` from the universal template, and reload Nginx seamlessly without downtime.
