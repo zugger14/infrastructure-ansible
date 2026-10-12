@@ -1,0 +1,17 @@
+---
+- name: Multi-App EC2 Infrastructure and Deployment
+  hosts: webservers
+  gather_facts: true
+
+  roles:
+    - role: common
+      tags: [common, swap]
+
+    - role: docker
+      tags: [docker]
+
+    - role: nginx
+      tags: [nginx, proxy]
+
+    - role: apps
+      tags: [apps, deploy]

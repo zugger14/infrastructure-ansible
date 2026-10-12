@@ -1,0 +1,46 @@
+---
+# Global environment configuration
+app_user: "ec2-user"
+app_base_dir: "/home/{{ app_user }}"
+
+# Swap configuration (essential for 1GB t3.micro instances)
+swap_size_mb: 2048
+swap_file_path: "/swapfile"
+
+# Nginx reverse proxy configuration
+nginx_conf_dir: "/etc/nginx"
+nginx_confd_dir: "{{ nginx_conf_dir }}/conf.d"
+nginx_defaultd_dir: "{{ nginx_conf_dir }}/default.d"
+
+# Applications to deploy and orchestrate
+applications:
+  - name: "portfolio"
+    repo_url: "https://github.com/zugger14/devops-portfolio.git"
+    version: "main"
+    dest: "{{ app_base_dir }}/devops-portfolio"
+    service_port: 3000
+    nginx_conf_type: "default_d"
+    nginx_conf_template: "portfolio.conf.j2"
+    nginx_conf_dest: "{{ nginx_defaultd_dir }}/portfolio.conf"
+    compose_file: "docker-compose.yml"
+
+  - name: "ams"
+    repo_url: "https://github.com/zugger14/ams.git"
+    version: "main"
+    dest: "{{ app_base_dir }}/ams"
+    service_port: 8081
+    nginx_conf_type: "conf_d"
+    nginx_conf_template: "ams.conf.j2"
+    nginx_conf_dest: "{{ nginx_confd_dir }}/ams.conf"
+    compose_file: "docker-compose.yml"
+
+  - name: "musicbook"
+    repo_url: "https://github.com/zugger14/musicbook.git"
+    version: "main"
+    dest: "{{ app_base_dir }}/musicbook"
+    service_port: 8001
+    websocket_port: 8890
+    nginx_conf_type: "conf_d"
+    nginx_conf_template: "musicbook.conf.j2"
+    nginx_conf_dest: "{{ nginx_confd_dir }}/musicbook.conf"
+    compose_file: "docker-compose.yml"

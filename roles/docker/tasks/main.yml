@@ -1,0 +1,31 @@
+---
+- name: Install Docker and Docker Compose plugin (Amazon Linux / RedHat)
+  become: true
+  ansible.builtin.dnf:
+    name:
+      - docker
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install Docker compose plugin on AL2023 if not present
+  become: true
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{{ ansible_architecture }}"
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: '0755'
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+
+- name: Start and enable Docker service
+  become: true
+  ansible.builtin.systemd:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add app user to docker group
+  become: true
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    groups: docker
+    append: true

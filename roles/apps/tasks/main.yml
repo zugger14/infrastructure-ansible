@@ -1,0 +1,24 @@
+---
+- name: Clone or pull application repositories
+  become: false
+  ansible.builtin.git:
+    repo: "{{ item.repo_url }}"
+    dest: "{{ item.dest }}"
+    version: "{{ item.version | default('main') }}"
+    accept_hostkey: true
+    force: false
+  loop: "{{ applications }}"
+
+- name: Build and start Docker containers for each application
+  become: false
+  ansible.builtin.command:
+    cmd: "docker compose up -d --build"
+    chdir: "{{ item.dest }}"
+  loop: "{{ applications }}"
+  changed_when: true
+
+- name: Clean up dangling Docker images
+  become: false
+  ansible.builtin.command:
+    cmd: "docker image prune -f"
+  changed_when: false

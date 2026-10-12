@@ -1,0 +1,52 @@
+---
+- name: Install Nginx
+  become: true
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Ensure Nginx configuration directories exist
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - "{{ nginx_confd_dir }}"
+    - "{{ nginx_defaultd_dir }}"
+
+- name: Ensure main nginx.conf sets default_server on Port 80
+  become: true
+  ansible.builtin.replace:
+    path: "{{ nginx_conf_dir }}/nginx.conf"
+    regexp: 'listen\s+80;'
+    replace: 'listen       80 default_server;'
+  notify: Ensure Nginx is reloaded
+
+- name: Ensure main nginx.conf sets IPv6 default_server on Port 80
+  become: true
+  ansible.builtin.replace:
+    path: "{{ nginx_conf_dir }}/nginx.conf"
+    regexp: 'listen\s+\[::\]:80;'
+    replace: 'listen       [::]:80 default_server;'
+  notify: Ensure Nginx is reloaded
+
+- name: Deploy application Nginx proxy configurations
+  become: true
+  ansible.builtin.template:
+    src: "{{ item.nginx_conf_template }}"
+    dest: "{{ item.nginx_conf_dest }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ applications }}"
+  notify: Ensure Nginx is reloaded
+
+- name: Start and enable Nginx service
+  become: true
+  ansible.builtin.systemd:
+    name: nginx
+    state: started
+    enabled: true
