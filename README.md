@@ -1,93 +1,95 @@
 # Multi-App Infrastructure & Deployment Automation (Ansible)
 
-This directory provides a production-grade, modular, and reusable Ansible setup to configure an AWS EC2 instance (Amazon Linux 2023 / RHEL / Fedora) and run all three web applications simultaneously:
-1. **DevOps Portfolio** (Next.js 16) - Port `80` default upstream via `127.0.0.1:3000`
-2. **AMS** (Appointment Management System - CodeIgniter + MariaDB) - Subdomain on Port `80` & Direct Port `8080` via `127.0.0.1:8081`
-3. **MusicBook** (Laravel + MariaDB + Redis + Socket.io) - Subdomain on Port `80` & Direct Port `8000` via `127.0.0.1:8001` + WebSocket `8890`
+A production-grade, 100% DRY (Don't Repeat Yourself), and role-based Ansible automation repository for provisioning AWS EC2 instances and orchestrating multiple dockerized web applications behind an Nginx reverse proxy.
 
 ---
 
-## 📁 Directory Structure
+## 🌟 How the DRY Architecture Works
+
+Previously, adding a new project required creating new tasks, new paths, and a dedicated `.conf` Nginx template for every app.
+
+Now, the entire system is **driven purely by configuration**. A **single unified Jinja2 template** handles:
+- Subdomain routing on Port 80 (e.g., `myapp.*.nip.io` or `myapp.domain.com`)
+- Optional direct public port routing (e.g., `http://<IP>:8090/`)
+- Optional WebSocket reverse proxying (e.g., Socket.io, ws)
+- Custom upload size limits (`client_max_body_size`)
+- Automatic Git checkout & Docker Compose container lifecycle
+
+---
+
+## 💡 How to Add a New Application
+
+To deploy another app in the future, **you do not touch any code or template files**. 
+Simply append an entry to `applications` in [`group_vars/all.yml`](file:///Users/shirish/vibe-coding-apps/infrastructure-ansible/group_vars/all.yml):
+
+```yaml
+applications:
+  # ... existing apps ...
+
+  - name: "my-new-app"
+    repo_url: "https://github.com/username/my-new-app.git"
+    version: "main"                 # Git branch, tag, or commit hash
+    service_port: 5000              # Internal container port
+    subdomain: "myapp"              # Subdomain on Port 80 (e.g. myapp.34.229.18.255.nip.io)
+    direct_port: 8090               # (Optional) Direct port (e.g. http://34.229.18.255:8090/)
+    client_max_body_size: "50M"     # (Optional) Default is 50M
+    websocket_port: 6001            # (Optional) If app uses WebSocket
+    websocket_path: "/socket.io/"   # (Optional) Default is /socket.io/
+```
+
+Then run:
+```bash
+ansible-playbook site.yml
+```
+Ansible will automatically:
+1. Clone the repository into `/home/ec2-user/my-new-app`
+2. Run `docker compose up -d --build`
+3. Generate `/etc/nginx/conf.d/my-new-app.conf` from the generic template
+4. Test and reload Nginx without any downtime
+
+---
+
+## 📁 Repository Structure
 
 ```text
-ansible/
-├── ansible.cfg                    # Ansible default options (YAML output, SSH config)
+infrastructure-ansible/
+├── ansible.cfg                          # Connection and execution settings
+├── site.yml                             # Master orchestrator playbook
+├── README.md                            # Documentation
 ├── inventory/
-│   └── hosts.ini                  # Target hosts and SSH connection settings
+│   └── hosts.ini                        # Target hosts and SSH settings
 ├── group_vars/
-│   └── all.yml                    # Global definitions, swap size, applications list
-├── site.yml                       # Primary orchestrator playbook
+│   └── all.yml                          # Centralized configuration (Apps, Swap, Paths)
 └── roles/
-    ├── common/                    # Base system tools & 2GB Swap configuration
+    ├── common/                          # Base system packages & persistent 2GB swapfile
     │   └── tasks/main.yml
-    ├── docker/                    # Docker Engine & Docker Compose plugin
+    ├── docker/                          # Docker Engine, Compose plugin, group membership
     │   └── tasks/main.yml
-    ├── nginx/                     # Reverse proxy configuration & default_server fix
+    ├── nginx/                           # Dynamic Nginx virtual hosts & default_server fix
     │   ├── tasks/main.yml
     │   ├── handlers/main.yml
     │   └── templates/
-    │       ├── portfolio.conf.j2
-    │       ├── ams.conf.j2
-    │       └── musicbook.conf.j2
-    └── apps/                      # Git checkout and docker compose multi-container orchestration
+    │       ├── default_upstream.conf.j2 # Serves the designated default app at root http://<IP>/
+    │       └── app_vhost.conf.j2        # Universal single template for all virtual hosts
+    └── apps/                            # Generic Git clone & Docker Compose execution loop
         └── tasks/main.yml
 ```
 
 ---
 
-## 🚀 Prerequisites
+## 🚀 Execution Commands
 
-1. **Install Ansible** (on your local machine):
-   ```bash
-   # macOS via Homebrew
-   brew install ansible
-
-   # OR via pipx / pip
-   pip install ansible
-   ```
-
-2. **Verify SSH Key**:
-   Make sure your private key (e.g. `~/Desktop/shirish-webserver.pem`) has `400` permissions:
-   ```bash
-   chmod 400 ~/Desktop/shirish-webserver.pem
-   ```
-
----
-
-## ⚙️ Usage
-
-### 1. Test Connection
+From this folder:
 ```bash
+# 1. Ping test
 ansible -m ping webservers
-```
 
-### 2. Dry-Run / Syntax Check
-```bash
-ansible-playbook site.yml --syntax-check
-ansible-playbook site.yml --check
-```
-
-### 3. Run the Full Provisioning & Deployment
-```bash
+# 2. Deploy everything
 ansible-playbook site.yml
+
+# 3. Only update Nginx configs without touching Docker
+ansible-playbook site.yml --tags "nginx"
+
+# 4. Only pull & restart Docker containers
+ansible-playbook site.yml --tags "apps"
 ```
-
-### 4. Run Selective Roles using Tags
-You can execute specific roles without re-running everything:
-- Only update Nginx proxy configurations:
-  ```bash
-  ansible-playbook site.yml --tags "nginx"
-  ```
-- Only rebuild/redeploy docker applications:
-  ```bash
-  ansible-playbook site.yml --tags "apps"
-  ```
-- Only configure base system and swap:
-  ```bash
-  ansible-playbook site.yml --tags "common"
-  ```
-
----
-
-## 🔒 Adding New Apps in the Future
-To add another application, simply add a new entry to the `applications` list in `group_vars/all.yml` and provide its corresponding Nginx template in `roles/nginx/templates/`. Everything else is automated.

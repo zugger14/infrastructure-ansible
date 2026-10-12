@@ -3,17 +3,18 @@
   become: false
   ansible.builtin.git:
     repo: "{{ item.repo_url }}"
-    dest: "{{ item.dest }}"
+    dest: "{{ item.dest | default(app_base_dir + '/' + item.name) }}"
     version: "{{ item.version | default('main') }}"
     accept_hostkey: true
     force: false
   loop: "{{ applications }}"
+  register: git_pull_status
 
 - name: Build and start Docker containers for each application
   become: false
   ansible.builtin.command:
     cmd: "docker compose up -d --build"
-    chdir: "{{ item.dest }}"
+    chdir: "{{ item.dest | default(app_base_dir + '/' + item.name) }}"
   loop: "{{ applications }}"
   changed_when: true
 

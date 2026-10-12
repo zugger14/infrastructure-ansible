@@ -1,11 +1,19 @@
-# MusicBook Reverse Proxy Configuration
+# ==============================================================================
+# Unified Generic Nginx Reverse Proxy Template for: {{ item.name }}
+# Generated automatically by Ansible. Do NOT edit manually on the server.
+# ==============================================================================
 
-# 1. Subdomain routing on Port 80 (e.g., musicbook.34.229.18.255.nip.io or musicbook.yourdomain.com)
+{% set sub = item.subdomain | default(item.name) %}
+{% set client_body = item.client_max_body_size | default('50M') %}
+
+{# ------------------------------------------------------------- #}
+{# 1. SUBDOMAIN ROUTING (e.g. {{ sub }}.*.nip.io or {{ sub }}.domain.com) #}
+{# ------------------------------------------------------------- #}
 server {
     listen 80;
-    server_name ~^musicbook\..*$;
+    server_name ~^{{ sub }}\..*$;
 
-    client_max_body_size 100M;
+    client_max_body_size {{ client_body }};
 
     location / {
         proxy_pass http://127.0.0.1:{{ item.service_port }};
@@ -19,8 +27,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Real-Time WebSocket forwarding (Socket.io)
-    location /socket.io/ {
+{% if item.websocket_port is defined %}
+    # Real-Time WebSocket forwarding
+    location {{ item.websocket_path | default('/socket.io/') }} {
         proxy_pass http://127.0.0.1:{{ item.websocket_port }};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -30,14 +39,18 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
+{% endif %}
 }
 
-# 2. Direct Port routing on Port 8000 (e.g., http://34.229.18.255:8000/)
+{# ------------------------------------------------------------- #}
+{# 2. DIRECT PORT ROUTING (Optional dedicated external port)     #}
+{# ------------------------------------------------------------- #}
+{% if item.direct_port is defined %}
 server {
-    listen 8000;
+    listen {{ item.direct_port }};
     server_name _;
 
-    client_max_body_size 100M;
+    client_max_body_size {{ client_body }};
 
     location / {
         proxy_pass http://127.0.0.1:{{ item.service_port }};
@@ -51,8 +64,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Real-Time WebSocket forwarding (Socket.io)
-    location /socket.io/ {
+{% if item.websocket_port is defined %}
+    # Real-Time WebSocket forwarding
+    location {{ item.websocket_path | default('/socket.io/') }} {
         proxy_pass http://127.0.0.1:{{ item.websocket_port }};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -62,4 +76,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
+{% endif %}
 }
+{% endif %}

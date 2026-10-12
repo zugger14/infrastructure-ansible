@@ -33,15 +33,25 @@
     replace: 'listen       [::]:80 default_server;'
   notify: Ensure Nginx is reloaded
 
-- name: Deploy application Nginx proxy configurations
+- name: Deploy default upstream location proxy for root requests
   become: true
   ansible.builtin.template:
-    src: "{{ item.nginx_conf_template }}"
-    dest: "{{ item.nginx_conf_dest }}"
+    src: "default_upstream.conf.j2"
+    dest: "{{ nginx_defaultd_dir }}/default_app.conf"
     owner: root
     group: root
     mode: '0644'
-  loop: "{{ applications }}"
+  notify: Ensure Nginx is reloaded
+
+- name: Deploy application virtual host reverse proxy configs
+  become: true
+  ansible.builtin.template:
+    src: "app_vhost.conf.j2"
+    dest: "{{ nginx_confd_dir }}/{{ item.name }}.conf"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ applications | rejectattr('is_default_app', 'defined') | list }}"
   notify: Ensure Nginx is reloaded
 
 - name: Start and enable Nginx service
