@@ -52,3 +52,12 @@ applications:
     websocket_port: 8890
     websocket_path: "/socket.io/"
     client_max_body_size: "100M"
+
+  - name: "mindflow"
+    repo_url: "https://github.com/zugger14/mindflow.git"
+    version: "main"
+    service_port: 3020
+    subdomain: "mindflow"
+    direct_port: 3020
+    client_max_body_size: "50M"
+
