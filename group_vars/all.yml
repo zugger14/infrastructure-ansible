@@ -58,6 +58,6 @@ applications:
     version: "main"
     service_port: 3020
     subdomain: "mindflow"
-    direct_port: 3020
+    direct_port: 3002
     client_max_body_size: "50M"
 
